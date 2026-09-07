@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Secrets — never commit these. If one has already been committed, rotating the
+# credential is the fix; deleting the file afterwards is only tidying up.
+.env
+.env.*
+!.env.example
+
+# Build output
+dist/
+build/
+
+# Logs and caches
+*.log
+npm-debug.log*
+.vite/
+coverage/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
