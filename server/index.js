@@ -2,7 +2,14 @@
 // 1. Load settings from .env
 // 2. Set up Express (the web server) and its routes
 // 3. Connect to MongoDB, then start listening for requests
-
+/*
+loads .env, so it knows the MongoDB address and JWT secret
+creates the Express app
+adds cors() and express.json(), so it can read the JSON that React sends
+connects each URL prefix to its route file (the three app.use lines)
+connects to MongoDB
+starts listening on port 5000 and waits for requests
+*/
 require("dotenv").config();
 
 const express = require("express");
