@@ -1,7 +1,9 @@
 // Marking attendance (all routes need a token)
 //   POST   /api/attendance       mark present/absent for a course on a date
 //   DELETE /api/attendance/:id   remove one record
-
+/*
+attendance.js: mark a class present or absent, delete a record
+*/
 const express = require("express");
 const mongoose = require("mongoose");
 const Course = require("../models/Course");
