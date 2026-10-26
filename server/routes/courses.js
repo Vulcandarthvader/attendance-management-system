@@ -4,7 +4,9 @@
 //   GET    /api/courses/:id   one course + stats + its attendance records
 //   PUT    /api/courses/:id   edit a course
 //   DELETE /api/courses/:id   delete a course and its records
-
+/*
+courses.js: add, list, view, edit and delete subjects. When listing them, it counts present and absent records and calls calculate.js.
+*/
 const express = require("express");
 const mongoose = require("mongoose");
 const Course = require("../models/Course");
