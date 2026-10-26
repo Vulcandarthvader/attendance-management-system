@@ -1,262 +1,181 @@
-# Attendance — how many classes can I actually miss?
+# Attendance Tracker — how many classes can I skip?
 
-A personal attendance tracker for the question a percentage never answers.
-Knowing you are at 73% tells you where you stand. It does not tell you what to
-do, because that depends entirely on how much semester is left: 73% in week two
-and 73% in week fourteen are completely different situations, and only one of
-them is a problem.
+A MERN app (MongoDB, Express, React, Node.js) for students who must keep a minimum attendance (like 75%).
 
-So this app answers the useful version instead — **"you can miss 4 more DBMS
-classes"**, or **"attend the next 6 TOC classes in a row to get back to 75%"** —
-computed from your actual timetable, per subject, with the arithmetic shown.
+You add your subjects, mark each class as **present** or **absent**, and for every subject the app tells you:
+
+- **k**: how many more classes you can **skip** and still finish the semester at 75%, or
+- **m**: if you are below 75%, how many classes you must **attend in a row** to get back.
+
+Login uses **JWT** tokens, and passwords are hashed with **bcrypt**.
+
+---
+
+## Run it on your computer
+
+You need **Node.js 18+** and **MongoDB**. MongoDB can be installed on your computer, or you can use a free MongoDB Atlas cluster.
+
+**1. Start the backend**
 
 ```bash
+cd server
 npm install
-npm run dev          # API on :5000, web on :5173
+cp .env.example .env      # on Windows: copy .env.example .env
+# open .env and set MONGO_URI and JWT_SECRET
+npm run dev
 ```
 
-No database, no Docker, no configuration. The API falls back to in-memory
-storage and seeds a semester already in progress, so every screen has real data
-in it on first run. Sign in with **`demo` / `demo1234`**, or create an account.
+You should see `Connected to MongoDB` and `Server running on http://localhost:5000`.
 
-![Dashboard](docs/dashboard.png)
-
----
-
-## The idea
-
-Two closed-form questions, derived rather than iterated, so the UI can recompute
-them instantly as you drag the threshold slider.
-
-Let `a` = classes attended, `h` = classes held so far, `r` = classes remaining,
-`T = h + r`, and `p` = the required fraction (0.75 for 75%).
-
-**How many can I still skip?** Finish at or above `p`:
-
-$$\frac{a + r - k}{T} \ge p \quad\Longrightarrow\quad k \le a + r - pT$$
-
-A negative result is meaningful on its own: the target is already out of reach,
-and the app says so plainly rather than showing a cheerful zero.
-
-**How many must I attend to recover?** Each class you attend lifts the numerator
-*and* the denominator, which is why falling behind compounds:
-
-$$\frac{a + m}{h + m} \ge p \quad\Longrightarrow\quad m \ge \frac{ph - a}{1 - p}$$
-
-At `p = 1` this has no solution unless you have already attended everything — a
-100% requirement is unrecoverable by definition, and the code returns `Infinity`
-rather than dividing by zero.
-
-Both live in [`server/src/domain/bunk.js`](server/src/domain/bunk.js) as pure
-functions with no database or HTTP anywhere near them, which is why the rules
-that decide whether you pass the semester can be tested exhaustively in
-milliseconds.
-
-**Three details that decide whether the number is honest:**
-
-- **The denominator is scheduled classes, not recorded ones.** A class you
-  forgot to log still happened. Counting only your records would mean every
-  forgotten absence silently improves your score, so unmarked past classes are
-  counted *and* surfaced as a nudge.
-- **Cancelled classes leave the denominator entirely.** They are a third status,
-  not a missing record — otherwise every class the lecturer calls off quietly
-  damages your percentage.
-- **The overall figure is pooled, never an average of percentages.** A subject
-  with 40 classes and one with 8 do not carry equal weight. And when any subject
-  is below the line, the summary refuses to quote a pooled skip allowance at all,
-  because attendance is judged per subject and "16 classes to spare" is a
-  dangerous thing to read while three subjects are failing.
-
----
-
-## Architecture
-
-```
-client/                     React 19 + Vite
-  lib/api.js                one place that knows the URL and the token
-  components/               Ring, TrendChart, Heatmap, CourseCard
-  pages/                    Dashboard · Mark · History · Settings
-
-server/
-  domain/                   pure logic — dates, schedule, bunk maths
-  data/                     ── memoryStore.js  ┐  one interface,
-                            └─ mongoStore.js   ┘  two implementations
-  services/                 auth, attendance (domain × storage)
-  http/                     app factory, routes, zod validation
-  tests/                    domain · api · store contract
-```
-
-### The storage layer is two adapters behind one interface
-
-`MONGO_URI` set → Mongoose. Nothing set → in-memory. Nothing above
-`data/index.js` knows or cares which.
-
-That is what makes `npm run dev` work on a clean machine, and it makes the test
-suite run in about a second with no database to install, start or clean between
-cases. The obvious objection is that an in-memory store is just a mock that
-agrees with itself — so both adapters are held to a **shared contract suite**
-([`tests/contract/store.contract.js`](server/tests/contract/store.contract.js)):
-the same assertions, run twice. The Mongo run is skipped with an explicit
-message unless you point `TEST_MONGO_URI` at a database, so a green run always
-says which adapters were actually exercised.
+**2. Start the frontend** (in a second terminal)
 
 ```bash
-docker run -d -p 27017:27017 --name mongo-test mongo:7
-TEST_MONGO_URI=mongodb://127.0.0.1:27017/attendance_test npm test
+cd client
+npm install
+npm run dev
 ```
 
-### Testing
-
-**75 tests**, ~1 second, no database required.
-
-| Suite | What it covers |
-|---|---|
-| `domain.test.js` | Date normalisation, timetable derivation, every branch of the bunk maths including the boundary and unreachable cases |
-| `api.test.js` | Full request/response over the real Express app: auth, cross-account isolation, every server-side rule, error shapes |
-| `contract/` | Both storage adapters against identical assertions |
+Open http://localhost:5173. Create an account, add a subject, and start marking.
 
 ---
 
-## What changed from v1, and why
+## Folder structure
 
-The previous version worked, and reviewing it honestly is the most useful part
-of this rewrite. Each item below is a real defect with a real consequence.
+```
+server/                      ← Backend (Node + Express + MongoDB)
+  index.js                   Starts Express, connects to MongoDB, mounts the routes
+  .env.example               Settings template (MONGO_URI, JWT_SECRET, PORT)
+  models/
+    User.js                  name, email, password (bcrypt hash)
+    Course.js                user, name, totalClasses, minAttendance
+    Attendance.js            user, course, date, status (present/absent)
+  middleware/
+    auth.js                  Checks the JWT token; blocks requests without one
+  routes/
+    auth.js                  register, login, me
+    courses.js               add / list / view / edit / delete subjects
+    attendance.js            mark a class, delete a record
+  utils/
+    calculate.js             THE FORMULAS: percentage, k, m, status
 
-### Security
-
-| Issue | Consequence |
-|---|---|
-| **`server/.env` committed** with live Atlas credentials | The database was publicly readable and writable for the life of the repo. `.gitignore` listed `.env`, but the file was already tracked before that commit, so git kept including it. |
-| **No authentication anywhere** | `GET /api/attendance/19` returned that student's record to anyone; `POST /api/attendance` let anyone mark anyone present. For an app described as personal, the data was effectively public. |
-| **`err.message` returned on 500s** | Internal errors — including connection strings — were echoed to the client. |
-| **CORS pinned to one localhost origin** | Could not be deployed anywhere without a code change. |
-
-Now: bcrypt-hashed passwords, JWT sessions, every data route behind auth, every
-query scoped by `userId` with indexes that lead on it, login rate-limited,
-helmet headers, one error shape that never leaks internals, and login timing
-equalised so a wrong password and an unknown username are indistinguishable.
-
-### Rules that were never actually enforced
-
-The old README said *"the backend restricts attendance to valid semester
-dates"*. It did not. The weekend check was an `onChange` handler in the browser
-and the semester window was a JSX attribute (`min="2025-04-17" max="2025-04-30"`
-— a fixed two-week window, hardcoded). A two-line `curl` could record attendance
-for a Sunday in 2019, under a course code that did not exist, because
-`AttendanceRecord.course` was a free-text string with no enum.
-
-Now every rule lives in `validateClassDate` on the server, and the client *asks*
-the server which classes exist on a given day rather than deciding for itself —
-so the two cannot drift.
-
-### Data model
-
-- **`Student.attendance.{dbms,mpmc,toc,coa,se}`** — deleted. Declared, indexed,
-  and never written to by any code path. It also hardcoded five specific course
-  codes into the schema, so a sixth subject meant a migration.
-- **`AttendanceSummary`** — deleted. Running totals kept next to the ledger they
-  summarise, with nothing reconciling them; percentages were computed from the
-  ledger anyway, so the collection was pure drift risk. Totals now come from one
-  grouped aggregation.
-- **Dates** — all normalised to midnight UTC at the schema boundary. The old
-  duplicate check compared exact timestamps, so any payload carrying a time
-  component created a second record for a day already marked, straight past the
-  unique index.
-
-### Correctness and ergonomics
-
-- **`PORT=50001  # Change to match…`** — dotenv does not strip trailing comments,
-  so that variable's value was the whole string including the comment. It only
-  ever worked because `index.js` ignored `process.env.PORT` and hardcoded 5000 —
-  two bugs cancelling out, which is worse than one, because fixing either moves
-  the server to a port nothing is talking to. Config is now parsed and
-  range-checked by zod at boot.
-- **Marking twice returned 409 forever**, with no way to correct a mistake short
-  of editing the database. Marking is now idempotent per (course, day): the
-  second submission updates the first.
-- **`app.listen()` at module scope** meant importing the app bound a port, so it
-  could never be tested. It is a factory now, which is exactly what let the
-  75-test suite exist.
-- **`alert()` for every message** — blocking, unstyleable, and invisible to a
-  screen reader in context. Replaced with inline banners and real loading states.
-- **`http://localhost:5000` hardcoded in three components.** One API client now,
-  reached through a Vite dev proxy, so a deployed build talks to whatever origin
-  serves it.
-- The charting library is over half the bundle and one screen needs it, so it is
-  lazily loaded: **621 KB → 261 KB** initial JS (82 KB gzipped).
+client/                      ← Frontend (React + Vite)
+  vite.config.js             Forwards /api requests to the backend on port 5000
+  src/
+    main.jsx                 Starts React
+    App.jsx                  Shows Login if logged out; otherwise the pages
+    api.js                   One helper for all backend calls (adds the token)
+    pages/Login.jsx          Login + Register form
+    pages/Dashboard.jsx      All subjects + "Add a subject" form
+    pages/CourseDetail.jsx   One subject: stats, mark any date, settings, history
+    components/CourseCard.jsx  A subject's card on the dashboard
+    styles.css               Styling
+```
 
 ---
 
-## Screens
+## How the data flows (example: tapping "Present today")
 
-| | |
-|---|---|
-| ![Mark](docs/mark.png) | ![Settings](docs/settings.png) |
+```
+React (CourseCard button)
+  → api.js sends  POST /api/attendance  { courseId, date, status }
+                  with header  Authorization: Bearer <token>
+  → Vite proxy forwards it to Express on port 5000
+  → middleware/auth.js checks the token and sets req.userId
+  → routes/attendance.js checks the input, checks the course belongs to you,
+    then creates the record (or updates it if that date is already marked)
+  → MongoDB saves it
+  → React reloads GET /api/courses
+  → routes/courses.js counts present/absent → utils/calculate.js → k, m, message
+  → The card shows the new numbers
+```
 
-**Mark** asks the server which classes meet on the chosen day, so what you see
-is always what the API will accept. **Settings** is where the hardcoded dates
-went: define the semester and each subject's weekly days, and totals,
-projections and valid dates are all derived from that.
+**Login flow:** register or login → the server checks the password with bcrypt → it sends back a JWT → React saves it in `localStorage` → every later request sends it in the `Authorization` header.
 
 ---
 
-## API
+## The maths (utils/calculate.js)
 
-All routes except `/api/health` and the two auth routes require
-`Authorization: Bearer <token>`.
+| Symbol | Meaning |
+|---|---|
+| a | classes attended (present) |
+| h | classes held so far (present + absent) |
+| T | total classes in the semester (you enter this) |
+| r | remaining classes = T − h |
+| p | minimum attendance, e.g. 0.75 |
 
-| Method | Path | Purpose |
+**How many can I skip?** Your final % must stay at or above p:
+
+```
+(a + r − k) / T ≥ p   →   k ≤ a + r − p·T
+```
+
+**How many must I attend in a row to recover?** Each class you attend adds 1 to the top and the bottom of the fraction:
+
+```
+(a + m) / (h + m) ≥ p   →   m ≥ (p·h − a) / (1 − p)
+```
+
+**Example:** T = 60, h = 40, a = 30, so r = 20 and you are at 75%.
+k = 30 + 20 − 45 = **5**. You can skip 5 more classes.
+
+**Example:** a = 25, h = 40 (62.5%).
+m = (30 − 25) / 0.25 = **20**. Attend 20 in a row. Check: 45 / 60 = 75%.
+
+The code uses whole percentages (75, not 0.75) and multiplies by 100. That way every number is an integer and there are no decimal rounding mistakes.
+
+**Status** (the coloured badge):
+
+| Status | When |
+|---|---|
+| safe | at or above the minimum, and you can still skip at least 1 class |
+| tight | at or above the minimum now, but you cannot skip any more classes |
+| recovering | below the minimum now, but attending enough classes gets you back |
+| unrecoverable | even attending every remaining class cannot reach the minimum |
+
+Note: **k** is about your *final* percentage at the end of the semester. **m** is about getting back above the line *now*. While you are recovering, both can be shown.
+
+---
+
+## API endpoints (10)
+
+Every route except register and login needs `Authorization: Bearer <token>`.
+
+| Method | URL | What it does |
 |---|---|---|
-| `POST` | `/api/auth/register` · `/api/auth/login` | Returns a JWT and the user |
-| `GET` `PATCH` | `/api/auth/me` | Profile and threshold |
-| `GET` `PUT` | `/api/semester` | Semester dates, holidays, threshold |
-| `GET` `POST` | `/api/courses` | List, create |
-| `PATCH` `DELETE` | `/api/courses/:id` | Update, delete (with its records) |
-| `POST` | `/api/attendance` | Mark one class — idempotent per course/day |
-| `POST` | `/api/attendance/bulk` | Mark several, with per-entry outcomes |
-| `GET` `DELETE` | `/api/attendance` · `/api/attendance/:id` | List, remove |
-| `GET` | `/api/overview` | Per-subject standing plus the bunk budget |
-| `GET` | `/api/trend` | Weekly cumulative percentage |
-| `GET` | `/api/calendar` | Day-grouped records for the heatmap |
-| `GET` | `/api/agenda/:date` | Which classes meet on a day, and their status |
-
-Errors are uniform: `{ success: false, code, message, details? }`, with `code`
-machine-readable (`not_scheduled`, `holiday`, `outside_semester`, `future`,
-`no_semester`, `validation_failed`, …) and `message` written for a person.
+| POST | /api/auth/register | Create account (password hashed with bcrypt) → token |
+| POST | /api/auth/login | Check password → token |
+| GET | /api/auth/me | Who is logged in (used on page reload) |
+| GET | /api/courses | My subjects, each with its stats |
+| POST | /api/courses | Add a subject |
+| GET | /api/courses/:id | One subject + stats + all its records |
+| PUT | /api/courses/:id | Change name, total classes or minimum % |
+| DELETE | /api/courses/:id | Delete a subject and its records |
+| POST | /api/attendance | Mark present/absent for a date (marking again updates it) |
+| DELETE | /api/attendance/:id | Delete one record |
 
 ---
 
-## Configuration
+## Rules the server enforces
 
-Everything is optional — see [`.env.example`](.env.example). The ones that
-matter:
+- You can only see and change **your own** data. Every query filters by your user id.
+- You cannot mark a **future** date.
+- There is only **one record per subject per day**. A unique index on `(course, date)` guarantees it, and marking the same day again updates the record.
+- You cannot record more classes than the subject's **total**.
+- Passwords are never stored or sent back. Only the bcrypt hash is stored.
 
-| Variable | Default | Notes |
+## Tech stack
+
+| Part | Used | Why |
 |---|---|---|
-| `MONGO_URI` | *(unset)* | Unset runs in memory. Set it to persist. |
-| `PORT` | `5000` | |
-| `JWT_SECRET` | generated | **Required in production.** Generated per process in development, so a restart invalidates old tokens — correct for a throwaway secret. |
-| `CLIENT_ORIGIN` | `http://localhost:5173` | Comma-separated list |
-| `SEED_DEMO` | `auto` | Seeds only when the database has no users. Set `false` for real data. |
+| Frontend | React + Vite + React Router | Components and state; Vite gives a fast dev server and the /api proxy |
+| Backend | Node.js + Express | Simple, popular way to build a REST API in JavaScript |
+| Database | MongoDB + Mongoose | Stores JSON-like documents; Mongoose adds schemas and validation |
+| Auth | JWT + bcryptjs | Stateless login tokens; secure password hashing |
 
-Production refuses to start without `JWT_SECRET` rather than falling back to a
-hardcoded default, which is how tokens end up forgeable.
+## Ideas to add later
 
----
-
-## Known limitations
-
-- **Single timetable slot per weekday.** A subject that meets twice on a Tuesday
-  counts once. The schema would take `[{weekday, count}]` without much trouble;
-  the flat `weekdays` array was the simpler thing that covers a normal timetable.
-- **No revocation.** JWTs are stateless, so signing out clears the client's
-  token but does not invalidate it server-side. Fine for a single-user app;
-  anything needing logout-everywhere wants a token store.
-- **Attendance is self-reported.** This tracks what you tell it. It is a planning
-  tool, not a system of record — always check against your institution's.
-- **The in-memory store forgets everything on restart.** That is the point, but
-  it means the demo is a demo. Set `MONGO_URI` for real use.
-
-## Licence
-
-MIT.
+- A semester timetable, so total classes are counted automatically from dates and weekdays
+- A "cancelled" status for classes the teacher cancels
+- A chart of attendance over time
+- Reminders to mark today's classes
+- Deployment (Render or Railway for the backend, Vercel for the frontend, Atlas for the database)

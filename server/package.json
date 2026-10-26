@@ -1,32 +1,21 @@
 {
   "name": "attendance-server",
-  "version": "2.0.0",
-  "private": true,
-  "type": "module",
-  "description": "API for the personal attendance tracker",
-  "main": "src/index.js",
+  "version": "1.0.0",
+  "description": "Backend for the attendance tracker (Express + MongoDB)",
+  "main": "index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "nodemon --watch src src/index.js",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:contract": "vitest run tests/contract"
+    "start": "node index.js",
+    "dev": "nodemon index.js"
   },
   "dependencies": {
-    "bcryptjs": "^3.0.3",
+    "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
-    "dotenv": "^17.4.2",
-    "express": "^5.2.1",
-    "express-rate-limit": "^8.7.0",
-    "helmet": "^8.3.0",
-    "jsonwebtoken": "^9.0.3",
-    "mongoose": "^9.9.4",
-    "zod": "^4.5.4"
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.9.5"
   },
   "devDependencies": {
-    "nodemon": "^3.1.10",
-    "supertest": "^7.2.2",
-    "vitest": "^5.0.0"
-  },
-  "engines": { "node": ">=18" }
+    "nodemon": "^3.1.9"
+  }
 }

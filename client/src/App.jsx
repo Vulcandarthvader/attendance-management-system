@@ -1,54 +1,53 @@
-import { NavLink, Navigate, Route, Routes } from "react-router-dom";
+// Decides what to show:
+//  - not logged in  -> Login page
+//  - logged in      -> header + Dashboard ("/") or Course page ("/course/:id")
 
-import Dashboard from "./pages/Dashboard.jsx";
-import History from "./pages/History.jsx";
+import { useEffect, useState } from "react";
+import { Routes, Route, Link, Navigate } from "react-router-dom";
+import { api } from "./api";
 import Login from "./pages/Login.jsx";
-import Mark from "./pages/Mark.jsx";
-import Settings from "./pages/Settings.jsx";
-import { useAuth } from "./lib/auth.jsx";
+import Dashboard from "./pages/Dashboard.jsx";
+import CourseDetail from "./pages/CourseDetail.jsx";
 
 export default function App() {
-  const { user, loading, signOut } = useAuth();
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  if (loading) {
-    return (
-      <div className="center-screen">
-        <div className="skeleton" style={{ width: 200, height: 16 }} />
-        <span className="visually-hidden">Loading</span>
-      </div>
-    );
+  // When the page loads, if we have a saved token, ask the server who we are
+  useEffect(() => {
+    if (!localStorage.getItem("token")) {
+      setLoading(false);
+      return;
+    }
+    api("/auth/me")
+      .then((data) => setUser(data.user))
+      .catch(() => localStorage.removeItem("token"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  function logout() {
+    localStorage.removeItem("token");
+    setUser(null);
   }
 
-  if (!user) return <Login />;
+  if (loading) return <p className="center">Loading...</p>;
+  if (!user) return <Login onLogin={setUser} />;
 
   return (
-    <div className="shell">
-      <header className="topbar">
-        <span className="brand">
-          <span className="brand-mark">AT</span>
-          Attendance
-        </span>
-        <nav className="nav">
-          <NavLink to="/" end>Dashboard</NavLink>
-          <NavLink to="/mark">Mark</NavLink>
-          <NavLink to="/history">History</NavLink>
-          <NavLink to="/settings">Settings</NavLink>
-        </nav>
-        <div className="row" style={{ gap: 10 }}>
-          <span className="dim">{user.displayName || user.username}</span>
-          <button className="ghost sm" onClick={signOut}>Sign out</button>
+    <div className="container">
+      <header className="header">
+        <Link to="/" className="brand">Attendance Tracker</Link>
+        <div>
+          <span className="muted">Hi, {user.name}</span>
+          <button className="secondary" onClick={logout}>Log out</button>
         </div>
       </header>
 
-      <main className="page">
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/mark" element={<Mark />} />
-          <Route path="/history" element={<History />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </main>
+      <Routes>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/course/:id" element={<CourseDetail />} />
+        <Route path="*" element={<Navigate to="/" />} />
+      </Routes>
     </div>
   );
 }
