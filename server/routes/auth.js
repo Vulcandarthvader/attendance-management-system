@@ -2,7 +2,9 @@
 //   POST /api/auth/register
 //   POST /api/auth/login
 //   GET  /api/auth/me        (needs token)
-
+/*
+auth.js: register (hash the password, save the user, give back a token), login (check the password, give back a token), me (who am I?)
+*/
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
